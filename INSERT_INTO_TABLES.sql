@@ -29,4 +29,4 @@ DELETE FROM InvoiceLine;
 INSERT INTO InvoiceLine (InvoiceID, StockCode, Quantity)
 	SELECT a.Invoice, b.StockCode, b.Quantity
 	FROM online_retail_II AS a LEFT JOIN online_retail_II AS b ON a.Invoice = b.Invoice
-	WHERE a.Invoice IS NOT NULL;
+	WHERE a.Invoice IS NOT NUSLL;

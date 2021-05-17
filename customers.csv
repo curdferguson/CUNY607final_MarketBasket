@@ -19,8 +19,6 @@ CustomerID,Country
 12364,Belgium
 12365,Cyprus
 12367,Denmark
-12370,Cyprus
-12370,Austria
 12371,Switzerland
 12372,Denmark
 12373,Austria
@@ -39,7 +37,6 @@ CustomerID,Country
 12391,Cyprus
 12393,Australia
 12394,Belgium
-12394,Denmark
 12395,Belgium
 12397,Belgium
 12398,Switzerland
@@ -58,12 +55,10 @@ CustomerID,Country
 12414,Austria
 12415,Australia
 12417,Belgium
-12417,Spain
 12418,Switzerland
 12420,Cyprus
 12421,Spain
 12422,Australia
-12422,Switzerland
 12423,Belgium
 12424,Australia
 12425,Portugal
@@ -71,10 +66,8 @@ CustomerID,Country
 12427,Germany
 12428,Finland
 12429,Denmark
-12429,Austria
 12430,Norway
 12431,Australia
-12431,Belgium
 12432,Norway
 12433,Norway
 12434,Australia
@@ -96,10 +89,8 @@ CustomerID,Country
 12453,Austria
 12454,Spain
 12455,Cyprus
-12455,Spain
 12456,Switzerland
 12457,Switzerland
-12457,Cyprus
 12458,Switzerland
 12461,Switzerland
 12462,Spain
