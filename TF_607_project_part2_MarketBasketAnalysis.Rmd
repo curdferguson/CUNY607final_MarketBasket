@@ -1,5 +1,5 @@
 ---
-title: "TF_607_Project.MBA"
+title: "607 Final Project Part II: Market Basket Analysis"
 author: "Tyler Frankenberg"
 date: "5/18/2021"
 output: html_document
@@ -10,23 +10,135 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+### Intro: Market Basket Analysis
+
+The purpose of a Market Basket Analysis is to identify and visualize the impact of statistically significant associations between unique items across a multitude of occurrences.  As its name suggests, it originated in the analysis of items frequently purchased together in supermarket transactions, and we'll use it in an online retail example below.
+
+In selecting our model and drawing conclusions, we'll be evaluating associations according to the following association measures:
+
+##### Support
+
+The **support** of an item or is its frequency relative to the total number of orders in the dataset.  It can be measured for individual items as well as for associations between them.  Simply put,
+
+\[
+support (A, B) = \frac{orders\ with\ (A, B)}{all \ orders}
+\]
+
+##### Confidence
+
+The **confidence** of an association with respect to one of its items, is the association's frequency relative to that individual item's frequency.  
+
+\[
+confidence (A \Rightarrow B) = \frac{orders\ with\ (A, B)}{orders\ with\ A}
+\]
+
+A high confidence association indicates a high proportion of orders for the "Left Hand Side" item also feature the "Right Hand Side" item.  Note here that
+
+\[
+confidence (A \Rightarrow B) \neq confidence (B \Rightarrow A)
+\]
+
+##### Lift
+
+**Lift** quantifies the support of the association versus the support of its individual items independently.  It is the frequency of the association divided by the frequencies of the individual items assumed independent:
+
+\[
+lift (A, B) = \frac{support(A, B)}{support(A) \times support(B)}
+\]
 
 
-```{r message=FALSE, warning=false, results=hide}
+### Step 1: Import and describe transaction data
+
+In part 1, we exported to .csv the results of our SQL Query `SELECT * FROM TransactionLineView`. 
+
+Here, we'll begin by importing this data from .csv and taking a look at the size and shape of this dataset.  It includes 401,365 online retail transaction line items from 18,533 unique transactions, shipped over the course of  2009-2010 from a UK-based online home decor retailer.  
+
+#### Load Packages
+
+We're going to be relying for the "meat" of our analysis on the packages `arules` and `arulesViz`.
+
+```{r message=FALSE, warning=FALSE, results="hide"}
 
 library(tidyverse)
 library(arules)
 library(arulesViz)
+library(DT)
+
+options(scipen = 999)
+
+```
+```{r message= FALSE, warning= FALSE}
+
+#import transactions from .csv (as exported from database TransactionLineView in part 1)
+transactions_raw <- read_delim("https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/transactions_raw.csv", delim= ",")
+
+```
+
+#### Describe Transactions
+
+The 18,533 transactions grossed the eCommerce retailer 8,982,405 GBP, with an average order value of 484.67 GBP and an average basket size of 21.7 unique items per transaction.  While the company shipped to over 35 countries throughout Europe and as far afield as Brazil, the US, Japan, and Australia, 87.68% of its revenue shipped within the UK. 
+
+```{r}
+
+#view results in a DataTable
+datatable(head(transactions_raw), filter = "none")
+
+transactions_by_transaction <- transactions_raw %>% group_by(InvoiceID) %>% summarize(InvoiceID = max(InvoiceID), Customer = max(CustomerID), Country = max(Country), `Basket Size` = max(n()), Total = round(sum(Price * Qty), 2))
+
+#summarize transactions
+transactions_summary <- transactions_by_transaction %>% summarize(`No. of Transactions` = n(), `Avg. Basket Size` = round((sum(`Basket Size`) / `No. of Transactions`), 3), `Avg. Order Value` = round((sum(Total) / `No. of Transactions`), 2), Revenue = sum(Total))
+
+datatable(transactions_summary)
+
+
+# calculate transactions by country
+transactions_by_country <- transactions_by_transaction %>% group_by(Country) %>% summarize(`No. of Transactions` = n(), `Avg. Basket Size` = round((sum(`Basket Size`) / `No. of Transactions`), 3), `Avg. Order Value` = round((sum(Total) / `No. of Transactions`), 2), Revenue = sum(Total), `% of Revenue` = round((Revenue / sum(transactions_summary$Revenue)), 4)) %>% arrange(desc(`% of Revenue`))
+
+datatable(transactions_by_country)
+
+
+```
+
+#### Describe Item Makeup of the Transactions
+
+There are 3683 unique items, identified by their `StockCode` and `Description` fields, that appear on our 1853 items.  While we could analyze at length the percentage revenue or average quantity per order of the items in this dataset, we've narrowed our focus here to the variable of interest to Market Basket Analysis - the number of orders on which a particular item appears (without regard to the quantity ordered).
+
+We're going to remove 3 miscellaneous items POSTAGE, Manual, and CARRIAGE from the dataset at this point, as one in particular comes into our top 10 and may otherwise skew the analysis.
+
+Finally, we're going to view absolute and relative frequency plots for the items in our dataset, to get an read on how the quantity of orders is distributed amongst unique items.
+
+
+```{r}
+
+#top 10 items by # of orders shipped
+transactions_by_item_orders <- transactions_raw %>% group_by(StockCode) %>% summarize(StockCode = max(StockCode), Description = max(`Description`), Orders = max(n()), Quantity = sum(Qty), `Avg. Qty` = round((Quantity / Orders), 3), Price = max(Price), Total = round(sum(Price * Qty), 2)) %>% arrange(desc(Orders))
+
+datatable(head(transactions_by_item_orders, 10))
+
+```
+
+```{r echo = FALSE, results="hide"}
+#Remove miscellaneous S&H items
+head(transactions_by_item_orders, 1000) %>% arrange(desc(StockCode))
+
+transactions_by_item_orders <- transactions_by_item_orders %>% filter(!StockCode %in% c('POST', 'M', 'C2') & Orders > 1)
+head(transactions_by_item_orders, 1000) %>% arrange(desc(StockCode))
 
 ```
 
 
-
-```{r}
-#import transactions from .csv (as exported from database TransactionLineView)
-transactions_raw <- read_delim(, sep - ",", encoding = "UTF-8")
+### Step 2: Wrangle data to "single" format
 
 
+
+"Single" format is one of two input types allowed by the `read.transactions` function of package `arules`.  The "single" format lists two columns - one for the transaction's unique identifier (in this case, `InvoiceID`) and one for `Description` - the unique item name.
+
+Market Basket Analysis is agnostic toward the quantity and price of items on each transaction line, so we can exclude those columns.
+
+We'll use the arules package's Item Frequency Plot function to get a quick read on the top items in our set.  Will we see these top items show up in significant associations?
+
+
+```{r warning=FALSE}
 #wrangle to "single" format and write to .csv
 transactions_mba <- transactions_raw %>% distinct(InvoiceID, Description)
 
@@ -44,11 +156,18 @@ itemFrequencyPlot(transobj_mba, type = c("absolute"), topN = 1000, horiz = FALSE
 # show an item frequency plot
 itemFrequencyPlot(transobj_mba, type = c("absolute"), topN = 10, horiz = TRUE, names = TRUE, col = "lightblue", xlab = "Items", ylab = "", main = "TOP 10 Absolute Item Frequency")
 
-
 ```
+  
+  
+  
+### Step 3: Select support and confidence levels based on the dataset
+
+The strength and significance of the association rules we'll derive from our data is determined primarily by two variables, support and confidence, as discussed above.  We're going to settle on support and confidence levels for our analysis by looping the `apriori` algorithm over the dataset at different confidence and support levels, and counting the number of rules generated.
+
+The sweet spot we're looking for is the intersection of support and confidence with 10-20 rules that has the highest value for each.  We'll start by comparing support levels of 3%, 2%, 1%, and 0.5%...
 
 
-```{r results = hide}
+```{r results = "hide"}
 
 # Support and confidence values
 supportLevels <- c(0.03, 0.02, 0.01, 0.005)
@@ -98,9 +217,11 @@ for (i in 1:length(confidenceLevels)){
 ```
 
 
+At our lowest levels of confidence and support, the algorithm generates over 2000 rules - far too many to offer us useful insights. At a support level of 3%, by contrast, the model appears to offer us zero statistically significant association rules.  So in the next step, we'll recalibrate to look at support levels from 1% - 2.5%, and 50% or greater confidence.
 
 
-```{r}
+
+```{r warning=FALSE}
 
 rules_plot <- data.frame(
   confidence = confidenceLevels,
@@ -110,101 +231,152 @@ rules_plot <- data.frame(
   support_0.5 = rules_sup0.5) %>% 
   pivot_longer(cols = c(support_3, support_2, support_1, support_0.5), names_to = "support", values_to = "rules")
 
-rules_plot %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
+rules_plot %>% ggplot(aes(x = confidence, y = rules, color = support)) +
   geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
 
 
 ```
 
 
-## 
 
 
-```{r results = hide}
+```{r results = "hide"}
 
 # Support and confidence values
-supportLevels <- c(0.025, 0.02, 0.015, 0.01)
-confidenceLevels <- c(0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+supportLevels2 <- c(0.025, 0.02, 0.015, 0.01)
+confidenceLevels2 <- c(0.9, 0.8, 0.7, 0.6, 0.5)
 
 # Empty integers 
-rules_sup2.5 <- integer(length=9)
-rules_sup2 <- integer(length=9)
-rules_sup1.5 <- integer(length=9)
-rules_sup1 <- integer(length=9)
+rules_sup2.5 <- integer(length=5)
+rules_sup2 <- integer(length=5)
+rules_sup1.5 <- integer(length=5)
+rules_sup1 <- integer(length=5)
 
 # Apriori algorithm with a support level of 2.5%
-for (i in 1:length(confidenceLevels)) {
+for (i in 1:length(confidenceLevels2)) {
   
-  rules_sup2.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[1], 
-                                   conf=confidenceLevels[i], target="rules")))
+  rules_sup2.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels2[1], 
+                                   conf=confidenceLevels2[i], target="rules")))
   
 }
 
 # Apriori algorithm with a support level of 2%
-for (i in 1:length(confidenceLevels)){
+for (i in 1:length(confidenceLevels2)){
   
-  rules_sup2[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[2], 
-                                  conf=confidenceLevels[i], target="rules")))
+  rules_sup2[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels2[2], 
+                                  conf=confidenceLevels2[i], target="rules")))
   
 }
 
 # Apriori algorithm with a support level of 1.5%
-for (i in 1:length(confidenceLevels)){
+for (i in 1:length(confidenceLevels2)){
   
-  rules_sup1.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[3], 
-                                  conf=confidenceLevels[i], target="rules")))
+  rules_sup1.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels2[3], 
+                                  conf=confidenceLevels2[i], target="rules")))
   
 }
 
 # Apriori algorithm with a support level of 1%
-for (i in 1:length(confidenceLevels)){
+for (i in 1:length(confidenceLevels2)){
   
-  rules_sup1[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[4], 
-                                    conf=confidenceLevels[i], target="rules")))
+  rules_sup1[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels2[4], 
+                                    conf=confidenceLevels2[i], target="rules")))
   
 }
 
 # code chunk citation: Garcia, Xavier Vivancos.  "Market Basket Analysis."  Kaggle.com.  Published May 2, 2020.  Accessed from: https://www.kaggle.com/xvivancos/market-basket-analysis/code.
 ```
+  
+  
+  
+The recalibrated algorithm helps us drill down into the region of most value to us.  We can see that there are two options that meet our criteria: 
+
+-  support >= 1.5%, confidence >= 60%
+-  support >= 1.0%, confidence >= 70%
+
+Below, we will run the apriori agorithm at each of these intersections of support and confidence, and compare the results.
 
 
-
-
-
-
-
-```{r}
+```{r warning=FALSE}
 
 rules_plot1 <- data.frame(
-  confidence = confidenceLevels,
+  confidence = confidenceLevels2,
   support_2.5 = rules_sup2.5,
   support_2 = rules_sup2,
   support_1.5 = rules_sup1.5,
   support_1 = rules_sup1) %>% 
   pivot_longer(cols = c(support_2.5, support_2, support_1.5, support_1), names_to = "support", values_to = "rules")
 
-rules_plot1 %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
+rules_plot1 %>% ggplot(aes(x = confidence, y = rules, color = support)) +
   geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
-
-
-rules_plot2 <- data.frame(
-  confidence = confidenceLevels,
-  support_1.5 = rules_sup1.5,
-  support_1 = rules_sup1) %>% 
-  pivot_longer(cols = c(support_1.5, support_1), names_to = "support", values_to = "rules") %>% filter(confidence >= 0.5)
-
-rules_plot2 %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
-  geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
-
 
 ```
 
 
+### Step 4: Run our apriori analysis and interpret the results
 
-```{r}
+#### Support 1.0%, Confidence 70%
 
-rules <- apriori(transobj_mba, parameter=list(sup=0.01, conf=0.7, target="rules"))
+There are a few immediate takeaways from our dataset:
+- Items with the greatest absolute frequency in our dataset are not necessarily the items that appear most frequently in association rules (though a few notables do re-occur).
+- There are a few categories that stand out for this company as driving significant association:teacups/ saucers and cake stands; lunch bags; party bunting; and hanging candle holders.
+- The *lift* amongst the associations in this group of 19 items is extraordinary - a lift of 47.615 when customers purchase pink and blue Happy Birthday bunting together versus separately indicates the probability of the items being purchased together is 47.615 times greater than the probability they are purchased separately.   
 
-inspect(rules)
-                 
+(Remember formally, the definition of lift is the frequency of the association divided by the frequencies of the individual items assumed independent).
+
+\[
+lift (A, B) = \frac{support(A, B)}{support(A) \times support(B)}
+\]
+
+
+```{r message=FALSE, warning=FALSE}
+
+rules1 <- apriori(transobj_mba, parameter=list(sup=0.01, conf=0.7, target="rules"))
+
+inspectDT(rules1)
+summary(rules1)
+
+rules_scatter <- plot(rules1, measure=c("support", "lift"), 
+          shading = "confidence",
+          interactive = FALSE)
+
 ```
+
+
+#### Support 1.5%, Confidence 60%
+
+In the case of this dataset, we happened to lose the 4 rules with the most significant lift by upping our support threshold by 0.5%.  I would not necessarily generalize that we should air on the side of greater confidence over greater support - the relationship may vary considerably depending on the distribution of items and the nature of the observations.
+
+```{r message=FALSE, warning=FALSE}
+
+rules2 <- apriori(transobj_mba, parameter=list(sup=0.015, conf=0.6, target="rules"))
+
+inspect(rules2)
+summary(rules2)
+
+rules_scatter2 <- plot(rules2, measure=c("support", "lift"), 
+          shading = "confidence",
+          interactive = FALSE)
+
+```
+
+
+### Conclusion:
+
+The analysis we performed here reveals 19 associations between specific items that suggest strong cross-promotional opportunities for this retailer in 4 categories:  
+
+- Party bunting
+- Hanging candle holders
+- teacups and cake stands
+- lunch boxes
+
+Activating these opportunities in the real world would require more information about the nature of the company's customers and their purchasing habits.  While the dataset is characterized as "online retail transactions", the high AOV and Basket Size, combined with the types of association rules uncovered which bias items within the same category, indicates this site's customers are likely in the B2B space, and are reselling the items through online or brick-and-mortar retail.
+
+
+### References:
+
+Garcia, Xavier Vivancos.  "Market Basket Analysis."  Kaggle.com.  Published May 2, 2020.  Accessed from: <https://www.kaggle.com/xvivancos/market-basket-analysis/code>.
+
+Goel, Niharika.  "Market Basket Analysis Assocication Rules."  Medium.com. 23 July 2018.<https://medium.com/@niharika.goel/market-basket-analysis-association-rules-e7c27b377bd8>
+
+
