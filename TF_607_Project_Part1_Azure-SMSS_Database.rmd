@@ -1,5 +1,5 @@
 ---
-title: "TF_607_Final_Project Pt. 1 - Azure SQL Database setup"
+title: "607 Final Project Part I - Azure SQL Transactions Database"
 author: "Tyler Frankenberg"
 date: "5/15/2021"
 output: html_document
@@ -25,46 +25,63 @@ A note for students: Microsoft Azure offers a free student version (requires ver
 
 From the Azure account portal, a new SQL database can be provisioned with a simple user interface that walks through the process.  A server will need to be created to host the database if one does not exist already.
 
-![](azure_create_database.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure_create_database.jpg)
 
 A basic 5 DTU (Data Transaction Unit - Microsoft's all-in-one measure for database storage capacity, performance speed, and read/ write bandwidth) database up to 50GB is included in the free "Azure for Students" pricing tier, and costs $4.99/ mo. otherwise.  
 
 (And for all of your burning questions about how DTUs are computed, check out <https://sqlperformance.com/2017/03/azure/what-the-heck-is-a-dtu>.)
+  
+    
+      
+        
+          
 
 
-![](azure2_provision_database.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure2_provision_database.jpg)
+  
+  
+  
 #### Azure Blob Storage Container
 
 While we're at it, let's provision an Azure Storage Account that will give us a convenient place to host the .csv files we'll use to populate the eventual tables in our `mba_affinity` database.
 
 The process is very similar to setting up our database above, and analogous.  We're first going to set up our storage account `curdferguson`...
 
-![](azure3_provision_storage_account.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure3_provision_storage_account.jpg)
+    
+  
+  
 ...and then create a 'container', which will store the .csv files we'll reference in our `BULK INSERT` SQL commands momentarily, to populate the database.
 
 Take note of the Public Access Level **Container** specified here - this must be selected to allow direct access to the files stored therein.
 
-![](azure4_provision_container.jpg)
-
-
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure4_provision_container.jpg)
+  
+  
+  
+  
+  
 ### Step 2: Connect to Microsoft SQL Server Management Studio 2019
 
 To connect, we enter our database url, local port, and the server admin credentials we've defined for server `curdferguson1` in MS Azure, in the SQL Server Management Studio login.
 
-![](SQL Server Connection.jpg)
-
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SQL%20Server%20Connection.jpg)
+  
+    
+      
+        
 
 Once successfully connected, we can see the database `mba_affinity` in our Object Explorer.
 
 
-![](SQL Server Object Explorer Connection.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SQL%20Server%20Object%20Explorer%20Connection.jpg)
 
 ### Connect Blob Storage to SQL Database
 
 We neeed to set up Azure Blob Storage Container `mba_affinity` as an external data source so that we can access it within our SQL Server queries.  We start by opening up a new query window within SQL Server Management Studio, and follow the following steps:
 
 
-![](SSMS_database_scoped_credential.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SSMS_database_scoped_credential.jpg)
 
 
 1.  We create a master key with unique password through the `CREATE MASTER KEY` command
@@ -72,13 +89,13 @@ We neeed to set up Azure Blob Storage Container `mba_affinity` as an external da
 2.  We use the `CREATE DATABSE SCOPED CREDENTIAL` command to store a unique, time limited, **Shared Access Signature** that authenticates our access to the container.  Our **Shared Access Signature** is created from the settings page of our `mba_affinity` Azure blob storage container...
 
 
-![](azure5_SAS_token.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure5_SAS_token.jpg)
 
 
 3.  Finally, we use the `CREATE EXTERNAL DATA SOURCE` command to instantiate the connection!  Once set up, we can see `azure_mba_affinity` as an external data source in our Object Explorer...
 
 
-![](SMSS_object_explorer_external_data_source.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SSMS_object_explorer_external_data_source.jpg)
 
 
 
@@ -87,7 +104,7 @@ We neeed to set up Azure Blob Storage Container `mba_affinity` as an external da
 
 #### Load the tidyverse library
 
-```{r, messages=false}
+```{r, message=FALSE}
 
 library(tidyverse)
 
@@ -96,7 +113,7 @@ library(tidyverse)
 
 #### Import Online_Retail_II
 
-```{r}
+```{r message= FALSE, warning= FALSE}
 
 url <- "https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/online_retail_II.csv"
 
@@ -157,7 +174,7 @@ invoice_lines <- invoice_lines %>% select(LineID, InvoiceID, StockCode, Quantity
 
 On our way back to SMSS, we'll briefly pop back to our Azure storage container `mba_affinity` and upload our four .csv data files...
 
-![](azure6_upload_csv.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/azure6_upload_csv.jpg)
 
 ### Step 5: Populate the mba_affinity Database
 
@@ -165,26 +182,30 @@ On our way back to SMSS, we'll briefly pop back to our Azure storage container `
 
 We're now ready to create our four tables, and populate them using bulk insert, an operation that takes approximately 1 minute.  
 
-![](SSMS_successful_bulk_insert.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SSMS_successful_bulk_insert.jpg)
 
 
 #### ALTER TABLES to establish keys defining parent-child relationships
 
-![](SSMS_alter_table.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SSMS_alter_table.jpg)
 
-![](SMSS_Database_diagram.jpg)
+![](https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SMSS_Database_diagram.jpg)
 
 We end up with a basic normalized schema that joins our four tables to organize and store our transactional data.  To access it in the most efficient and streamlined way, we'll use views.  `TransactionLineView` recreates the initial Online Retail II dataset, while `TransactionTotalView` displays one line for each invoice and its total, aggregated from the individual Invoice Lines.
 
-[]!(SSMS_create_views.jpg)
+[]!(https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/SMSS_create_views.jpg)
 
 
-
+  
+    
+      
+        
 ### Step 6: Create a Keyring to secure database access in R
 
-Note: Code in this section and Step 7 is adapted from 607 Group Project 3 and credited to:  Esteban Aramayo.
+Note: Code in this section and in Step 7 was adapted from 607 Group Project 3 and credited to that group, especially Esteban Aramayo, Daniel Sullivan and Eric Hirsch.
 
-```{r keyring-set-up, echo= FALSE}
+
+```{r keyring-set-up, echo= TRUE, warning= FALSE}
 
 library(keyring)
 
@@ -258,6 +279,8 @@ We use the package RODBC to connect to our Azure SQL database and import data of
 
 ### References:
 
-Calbimonte, Daniel.  "How to use BULK INSERT to import data locally and in Azure." SQLShack.  https://www.sqlshack.com/use-bulk-insert-import-data-locally-azure/
+Calbimonte, Daniel.  "How to use BULK INSERT to import data locally and in Azure." SQLShack.  <https://www.sqlshack.com/use-bulk-insert-import-data-locally-azure/>
 
-UCI Machine Learning Repository.  "Online Retail II."  https://archive.ics.uci.edu/ml/datasets/Online+Retail+II#
+Kroenke, David M., Auer, David J., Vandenberg, Scott L. and Yoder, Robert C.  *Database Processing: Fundamentals, Design, and Implementation.*  15th Ed.  New York: Pearson, 2018.
+
+UCI Machine Learning Repository.  "Online Retail II."  <https://archive.ics.uci.edu/ml/datasets/Online+Retail+II>
