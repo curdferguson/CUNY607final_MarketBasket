@@ -1,0 +1,210 @@
+---
+title: "TF_607_Project.MBA"
+author: "Tyler Frankenberg"
+date: "5/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r message=FALSE, warning=false, results=hide}
+
+library(tidyverse)
+library(arules)
+library(arulesViz)
+
+```
+
+
+
+```{r}
+#import transactions from .csv (as exported from database TransactionLineView)
+transactions_raw <- read_delim(, sep - ",", encoding = "UTF-8")
+
+
+#wrangle to "single" format and write to .csv
+transactions_mba <- transactions_raw %>% distinct(InvoiceID, Description)
+
+transactions_mba$Description <- transactions_mba$Description %>% str_trim(side = c("both"))
+#write_delim(transactions_mba, file = "transactions_mba.csv", delim = ",", na = "", append = FALSE)
+
+# create transaction object from transactions_mba .csv file, and view summary output
+transobj_mba <- read.transactions(file = "https://raw.githubusercontent.com/curdferguson/CUNY607final_MarketBasket/main/transactions_mba.csv", format = "single", header = TRUE, sep = ",", cols = c(1, 2), rm.duplicates = TRUE)
+
+summary(transobj_mba)
+
+# show an item frequency plot
+itemFrequencyPlot(transobj_mba, type = c("absolute"), topN = 1000, horiz = FALSE, names = FALSE, col = "lightblue", angle = 45, xlab = "Items", ylab = "Frequency", main = "Absolute Item Frequency")
+
+# show an item frequency plot
+itemFrequencyPlot(transobj_mba, type = c("absolute"), topN = 10, horiz = TRUE, names = TRUE, col = "lightblue", xlab = "Items", ylab = "", main = "TOP 10 Absolute Item Frequency")
+
+
+```
+
+
+```{r results = hide}
+
+# Support and confidence values
+supportLevels <- c(0.03, 0.02, 0.01, 0.005)
+confidenceLevels <- c(0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+
+# Empty integers 
+rules_sup3 <- integer(length=9)
+rules_sup2 <- integer(length=9)
+rules_sup1 <- integer(length=9)
+rules_sup0.5 <- integer(length=9)
+
+# Apriori algorithm with a support level of 3%
+for (i in 1:length(confidenceLevels)) {
+  
+  rules_sup3[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[1], 
+                                   conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 2%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup2[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[2], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 1%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup1[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[3], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 0.5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup0.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[4], 
+                                    conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# code chunk citation: Garcia, Xavier Vivancos.  "Market Basket Analysis."  Kaggle.com.  Published May 2, 2020.  Accessed from: https://www.kaggle.com/xvivancos/market-basket-analysis/code.
+
+
+```
+
+
+
+
+```{r}
+
+rules_plot <- data.frame(
+  confidence = confidenceLevels,
+  support_3 = rules_sup3,
+  support_2 = rules_sup2,
+  support_1 = rules_sup1,
+  support_0.5 = rules_sup0.5) %>% 
+  pivot_longer(cols = c(support_3, support_2, support_1, support_0.5), names_to = "support", values_to = "rules")
+
+rules_plot %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
+  geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
+
+
+```
+
+
+## 
+
+
+```{r results = hide}
+
+# Support and confidence values
+supportLevels <- c(0.025, 0.02, 0.015, 0.01)
+confidenceLevels <- c(0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+
+# Empty integers 
+rules_sup2.5 <- integer(length=9)
+rules_sup2 <- integer(length=9)
+rules_sup1.5 <- integer(length=9)
+rules_sup1 <- integer(length=9)
+
+# Apriori algorithm with a support level of 2.5%
+for (i in 1:length(confidenceLevels)) {
+  
+  rules_sup2.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[1], 
+                                   conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 2%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup2[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[2], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 1.5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup1.5[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[3], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 1%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup1[i] <- length(apriori(transobj_mba, parameter=list(sup=supportLevels[4], 
+                                    conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# code chunk citation: Garcia, Xavier Vivancos.  "Market Basket Analysis."  Kaggle.com.  Published May 2, 2020.  Accessed from: https://www.kaggle.com/xvivancos/market-basket-analysis/code.
+```
+
+
+
+
+
+
+
+```{r}
+
+rules_plot1 <- data.frame(
+  confidence = confidenceLevels,
+  support_2.5 = rules_sup2.5,
+  support_2 = rules_sup2,
+  support_1.5 = rules_sup1.5,
+  support_1 = rules_sup1) %>% 
+  pivot_longer(cols = c(support_2.5, support_2, support_1.5, support_1), names_to = "support", values_to = "rules")
+
+rules_plot1 %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
+  geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
+
+
+rules_plot2 <- data.frame(
+  confidence = confidenceLevels,
+  support_1.5 = rules_sup1.5,
+  support_1 = rules_sup1) %>% 
+  pivot_longer(cols = c(support_1.5, support_1), names_to = "support", values_to = "rules") %>% filter(confidence >= 0.5)
+
+rules_plot2 %>% ggplot(aes(x = confidence, y = rules, fill = support)) +
+  geom_point() + geom_line(legend = TRUE) + scale_fill_brewer()
+
+
+```
+
+
+
+```{r}
+
+rules <- apriori(transobj_mba, parameter=list(sup=0.01, conf=0.7, target="rules"))
+
+inspect(rules)
+                 
+```
